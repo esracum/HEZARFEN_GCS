@@ -1,7 +1,7 @@
 # Hezarfen Takımı Ground Control System (Yer Kontrol İstasyonu)
 
 📡 **Hezarfen Takımı GCS (Ground Control Station)**, İHA'ların yerden kontrolü, canlı telemetri takibi, kamera görüntüsü aktarımı ve görev planlama işlevleri için geliştirilmiş bir **Python / PyQt5 tabanlı** masaüstü uygulamasıdır. 
-👨‍💻 **Geliştiriciler:** Aykhan Shirinzade, Esra Cüm
+- 👨‍💻 **Geliştiriciler:** Aykhan Shirinzade, Esra Cüm
 
 ## 🚀 Özellikler
 - 📡 **Telemetri İzleme:** Anlık hız, irtifa, yön, konum gibi uçuş verilerinin takibi.

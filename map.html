@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Drone Haritası</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <style>
+        #map { height: 100vh; }
+        .drone-icon {
+            background: #ff4444;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        // Başlangıçta Türkiye görünümü
+        var map = L.map('map').setView([39.9334, 32.8597], 6);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Drone marker'ı oluştur
+        var droneIcon = L.divIcon({
+            className: 'drone-icon',
+            html: '✈️',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        });
+
+        // Drone marker'ı başlangıçta gizli (konum gelince görünür olacak)
+        var droneMarker = L.marker([0, 0], {icon: droneIcon});
+        
+        // Drone trail için polyline
+        var droneTrail = L.polyline([], {color: 'red', weight: 3});
+        var trailPoints = [];
+        var mapInitialized = false;
+
+        function updateDronePosition(lat, lon) {
+            console.log('Drone pozisyonu güncelleniyor:', lat, lon);
+            
+            // İlk kez konum geliyorsa marker'ı haritaya ekle ve konuma odakla
+            if (!mapInitialized) {
+                droneMarker.addTo(map);
+                droneTrail.addTo(map);
+                map.setView([lat, lon], 15);
+                mapInitialized = true;
+                console.log('Drone konumuna odaklandı:', lat, lon);
+            }
+            
+            // Marker'ı güncelle
+            droneMarker.setLatLng([lat, lon]);
+            
+            // Trail'e yeni nokta ekle
+            trailPoints.push([lat, lon]);
+            if (trailPoints.length > 50) { // Son 50 noktayı tut
+                trailPoints.shift();
+            }
+            droneTrail.setLatLngs(trailPoints);
+            
+            // Drone hareket ettikçe haritayı takip et
+            map.panTo([lat, lon]);
+        }
+        
+        // Test fonksiyonu
+        function testPosition() {
+            updateDronePosition(41.0082, 28.9784);
+        }
+        
+        // Harita tıklama olayı
+        map.on('click', function(e) {
+            var lat = e.latlng.lat;
+            var lon = e.latlng.lng;
+            console.log('MAP_CLICK:' + lat + ',' + lon);
+        });
+    </script>
+</body>
+</html>

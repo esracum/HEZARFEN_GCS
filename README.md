@@ -17,3 +17,5 @@
 git clone https://github.com/hezarfen-takimi/gcs.git
 cd gcs
 pip install -r requirements.txt
+
+main_ui.py dosyasında map_path değişkenine kendi map.html dosyanızın konumunu yazın

@@ -1,7 +1,7 @@
 import time
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFrame, QGroupBox, QApplication, QComboBox,
-    QListWidget, QListWidgetItem, QInputDialog, QScrollArea, QWidget, QLabel
+    QListWidget, QListWidgetItem, QInputDialog, QScrollArea, QWidget, QLabel, QStackedLayout, QTableWidget, QTableWidgetItem, QLineEdit, QHBoxLayout, QFileDialog, QMessageBox
 )
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWebChannel import QWebChannel
@@ -54,11 +54,9 @@ class DroneGCS(QWidget):
         self.web_view.page().setWebChannel(self.web_channel)
 
     def initUI(self):
-        # Arayüz elemanlarını oluşturur ve düzenler
         self.setWindowTitle("🚀 HEZARFEN - Yer Kontrol İstasyonu")
         self.setGeometry(100, 100, 1200, 750)
         self.setStyleSheet("background-color: #E3F2FD;")
-        # Uygulama genelinde emoji fontu kullan
         QApplication.setFont(QFont("Noto Color Emoji"))
 
         # Harita Görüntüleme
@@ -67,12 +65,46 @@ class DroneGCS(QWidget):
         self.web_view.setUrl(QUrl.fromLocalFile(map_path))
         self.web_view.setStyleSheet("border: 3px solid #B0BEC5; border-radius: 8px;")
 
-        # Durum Bilgisi
+        # Önce sağ panelde kullanılacak tüm widget'ları oluştur
         self.status_label = QLabel("🟡 Durum: Bağlı Değil", self)
         self.status_label.setFrameStyle(QFrame.Panel | QFrame.Sunken)
         self.status_label.setStyleSheet("font-size: 14px; color: #1E3A5F; background: white; padding: 6px; border-radius: 5px;")
 
-        # Telemetri Verileri
+        self.connection_group = QGroupBox("🔧 Bağlantı Ayarları")
+        self.connection_group.setStyleSheet("QGroupBox { font-size: 16px; font-weight: bold; color: #1E3A5F; }")
+        self.port_combo = QComboBox()
+        self.port_combo.addItems([
+            "udp:127.0.0.1:14550",
+            "udp:14550",
+            "/dev/ttyUSB0",
+            "/dev/ttyACM0",
+            "COM3",
+            "tcp:192.168.2.1:5760"
+        ])
+        self.port_combo.setCurrentText("udp:127.0.0.1:14550")
+        self.port_combo.setEditable(True)
+        self.baud_combo = QComboBox()
+        self.baud_combo.addItems(["57600", "115200", "921600"])
+        self.baud_combo.setCurrentText("115200")
+        self.baud_combo.setEditable(True)
+        conn_layout = QHBoxLayout()
+        conn_layout.addWidget(QLabel("🔌 Port:"))
+        conn_layout.addWidget(self.port_combo)
+        conn_layout.addWidget(QLabel("⚙️ Baud:"))
+        conn_layout.addWidget(self.baud_combo)
+        self.connection_group.setLayout(conn_layout)
+
+        self.connect_button = MarqueeLabel("🔗 Bağlan")
+        self.connect_button.setStyleSheet("font-size: 16px; background-color: #4CAF50; color: white; padding: 10px; border-radius: 8px; font-weight: bold; border: 2px solid #388E3C;")
+        self.connect_button.mousePressEvent = lambda event: self.connect_to_drone()
+        self.start_telemetry_button = MarqueeLabel("📡 Telemetriyi Başlat")
+        self.start_telemetry_button.setStyleSheet("font-size: 14px; background-color: #2196F3; color: white; padding: 8px; border-radius: 6px; border: 2px solid #1976D2;")
+        self.start_telemetry_button.setEnabled(False)
+        self.start_telemetry_button.mousePressEvent = lambda event: self.start_telemetry() if self.start_telemetry_button.isEnabled() else None
+        self.emergency_button = MarqueeLabel("🆘 Acil Durdurma")
+        self.emergency_button.setStyleSheet("font-size: 14px; background-color: #D32F2F; color: white; font-weight: bold; padding: 8px; border-radius: 5px; border: 2px solid #B71C1C;")
+        self.emergency_button.mousePressEvent = lambda event: self.emergency_stop()
+
         self.telemetry_group = QGroupBox("📡 Telemetri Verileri")
         self.telemetry_group.setStyleSheet("QGroupBox { font-size: 16px; font-weight: bold; color: #1E3A5F; }")
         telemetry_layout = QVBoxLayout()
@@ -82,11 +114,9 @@ class DroneGCS(QWidget):
         self.speed_label = QLabel("💨 Hız: -")
         self.battery_label = QLabel("🔋 Pil: -%")
         self.yaw_label = QLabel("🧭 Yaw Açısı: -")
-
         for label in [self.lat_label, self.lon_label, self.alt_label, self.speed_label, self.battery_label, self.yaw_label]:
             label.setStyleSheet("font-size: 14px; font-family: 'Noto Color Emoji', 'Segoe UI Emoji', 'Arial'; color: #37474F; padding: 3px;")
             label.setWordWrap(True)
-
         telemetry_layout.addWidget(self.lat_label)
         telemetry_layout.addWidget(self.lon_label)
         telemetry_layout.addWidget(self.alt_label)
@@ -95,12 +125,9 @@ class DroneGCS(QWidget):
         telemetry_layout.addWidget(self.yaw_label)
         self.telemetry_group.setLayout(telemetry_layout)
 
-        # Uçuş Modları & Görev Planlama
         self.flight_modes_group = QGroupBox("✈️ Uçuş Modları & Görev Planlama")
         self.flight_modes_group.setStyleSheet("QGroupBox { font-size: 16px; font-weight: bold; color: #1E3A5F; }")
         flight_layout = QVBoxLayout()
-        
-        # --- SABİT KANAT MODLARI (SEÇMELİ) ---
         self.flight_mode_combo = QComboBox()
         self.flight_mode_combo.addItems([
             "OTOMATİK UÇUŞ",
@@ -280,74 +307,196 @@ class DroneGCS(QWidget):
         
         self.flight_modes_group.setLayout(flight_layout)
 
-        # Bağlantı & Acil Durum
-        self.connect_button = MarqueeLabel("🔗 Bağlan")
-        self.connect_button.setStyleSheet("font-size: 16px; background-color: #4CAF50; color: white; padding: 10px; border-radius: 8px; font-weight: bold; border: 2px solid #388E3C;")
-        self.connect_button.mousePressEvent = lambda event: self.connect_to_drone()
-        self.start_telemetry_button = MarqueeLabel("📡 Telemetriyi Başlat")
-        self.start_telemetry_button.setStyleSheet("font-size: 14px; background-color: #2196F3; color: white; padding: 8px; border-radius: 6px; border: 2px solid #1976D2;")
-        self.start_telemetry_button.setEnabled(False)
-        self.start_telemetry_button.mousePressEvent = lambda event: self.start_telemetry() if self.start_telemetry_button.isEnabled() else None
-        
-        self.emergency_button = MarqueeLabel("🆘 Acil Durdurma")
-        self.emergency_button.setStyleSheet("font-size: 14px; background-color: #D32F2F; color: white; font-weight: bold; padding: 8px; border-radius: 5px; border: 2px solid #B71C1C;")
-        self.emergency_button.mousePressEvent = lambda event: self.emergency_stop()
+        # Açılır menü (modlar gibi)
+        self.menu_combo = QComboBox()
+        self.menu_combo.addItems(["Ana Sayfa", "Kumanda Parametreleri", "Pixhawk Ayarları", "Kamera"])
+        self.menu_combo.setStyleSheet("font-size: 15px; padding: 6px; margin-bottom: 8px;")
 
-        # Bağlantı Ayarları Grubu
-        self.connection_group = QGroupBox("🔧 Bağlantı Ayarları")
-        self.connection_group.setStyleSheet("QGroupBox { font-size: 16px; font-weight: bold; color: #1E3A5F; }")
-
-        # Port ve Baudrate combo box
-        self.port_combo = QComboBox()
-        self.port_combo.addItems([
-            "udp:127.0.0.1:14550",  # ArduPilot SITL varsayılan port
-            "udp:14550",
-            "/dev/ttyUSB0",
-            "/dev/ttyACM0",
-            "COM3",
-            "tcp:192.168.2.1:5760"
-        ])
-        self.port_combo.setCurrentText("udp:127.0.0.1:14550")
-        self.port_combo.setEditable(True)
-        
-        self.baud_combo = QComboBox()
-        self.baud_combo.addItems(["57600", "115200", "921600"])
-        self.baud_combo.setCurrentText("115200")
-        self.baud_combo.setEditable(True)
-
-        conn_layout = QHBoxLayout()
-        conn_layout.addWidget(QLabel("🔌 Port:"))
-        conn_layout.addWidget(self.port_combo)
-        conn_layout.addWidget(QLabel("⚙️ Baud:"))
-        conn_layout.addWidget(self.baud_combo)
-
-        self.connection_group.setLayout(conn_layout)
-
-        main_layout = QHBoxLayout()
-        left_layout = QVBoxLayout()
-        left_layout.addWidget(self.web_view, stretch=2)
-        
-        right_layout = QVBoxLayout()
-        
-        right_layout.addWidget(self.status_label)
-        
-        right_layout.addWidget(self.connection_group)
-        
+        # Sağ panelde gösterilecek içerik widget'ları
+        self.right_stack = QStackedLayout()
+        # Ana Sayfa içeriği (mevcut sağ panel)
+        self.right_home = QWidget()
+        right_home_layout = QVBoxLayout()
+        right_home_layout.setContentsMargins(0, 0, 0, 0)
+        right_home_layout.setSpacing(4)
+        right_home_layout.addWidget(self.status_label)
+        right_home_layout.addWidget(self.connection_group)
         connection_layout = QHBoxLayout()
         connection_layout.addWidget(self.connect_button)
         connection_layout.addWidget(self.start_telemetry_button)
         connection_layout.addWidget(self.emergency_button)
-        right_layout.addLayout(connection_layout)
+        right_home_layout.addLayout(connection_layout)
+        right_home_layout.addWidget(self.telemetry_group)
+        right_home_layout.addWidget(self.flight_modes_group)
+        self.right_home.setLayout(right_home_layout)
+        # Kumanda Parametreleri içeriği
+        self.right_kumanda = QWidget()
+        kumanda_layout = QVBoxLayout()
+        kumanda_label = QLabel("Kumanda Parametreleri (şimdilik boş)")
+        kumanda_label.setAlignment(Qt.AlignCenter)
+        kumanda_layout.addWidget(kumanda_label)
+        self.right_kumanda.setLayout(kumanda_layout)
+        # Pixhawk Ayarları içeriği
+        self.right_pixhawk = QWidget()
+        pixhawk_layout = QVBoxLayout()
+        pixhawk_label = QLabel("Pixhawk Ayarları")
+        pixhawk_label.setAlignment(Qt.AlignCenter)
+        pixhawk_layout.addWidget(pixhawk_label)
         
-        right_layout.addWidget(self.telemetry_group)
+        # Parametreleri yenile/kaydet/yükle butonları
+        self.refresh_params_button = QPushButton("Parametreleri Yenile")
+        self.refresh_params_button.setEnabled(False)
+        self.save_params_button = QPushButton("Parametreleri Kaydet")
+        self.save_params_button.setEnabled(False)
+        self.load_params_button = QPushButton("Parametreleri Yükle")
+        self.load_params_button.setEnabled(False)
+        btn_layout = QHBoxLayout()
+        btn_layout.addWidget(self.refresh_params_button)
+        btn_layout.addWidget(self.save_params_button)
+        btn_layout.addWidget(self.load_params_button)
+        pixhawk_layout.addLayout(btn_layout)
         
-        right_layout.addWidget(self.flight_modes_group)
+        # Parametre listesi (QTableWidget)
+        self.param_table = QTableWidget()
+        self.param_table.setColumnCount(2)
+        self.param_table.setHorizontalHeaderLabels(["Parametre", "Değer"])
+        self.param_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        pixhawk_layout.addWidget(self.param_table)
+        
+        # Parametre düzenleme alanı
+        edit_layout = QHBoxLayout()
+        self.param_name_edit = QLineEdit()
+        self.param_name_edit.setPlaceholderText("Parametre adı")
+        self.param_value_edit = QLineEdit()
+        self.param_value_edit.setPlaceholderText("Yeni değer")
+        self.set_param_button = QPushButton("Parametreyi Güncelle")
+        self.set_param_button.setEnabled(False)
+        edit_layout.addWidget(self.param_name_edit)
+        edit_layout.addWidget(self.param_value_edit)
+        edit_layout.addWidget(self.set_param_button)
+        pixhawk_layout.addLayout(edit_layout)
+        
+        self.right_pixhawk.setLayout(pixhawk_layout)
+        # Stack'e ekle
+        self.right_stack.addWidget(self.right_home)
+        self.right_stack.addWidget(self.right_kumanda)
+        self.right_stack.addWidget(self.right_pixhawk)
+        # Kamera içeriği
+        self.right_camera = QWidget()
+        camera_layout = QVBoxLayout()
+        camera_label = QLabel("Kamera Görüntüsü")
+        camera_label.setAlignment(Qt.AlignCenter)
+        camera_layout.addWidget(camera_label)
+        self.camera_view = QWebEngineView()
+        # MJPEG stream URL'si (gerekirse değiştir)
+        self.camera_view.setUrl(QUrl("http://raspberrypi:8080/?action=stream"))
+        camera_layout.addWidget(self.camera_view)
+        self.right_camera.setLayout(camera_layout)
+        # Stack'e ekle
+        self.right_stack.addWidget(self.right_camera)
+        # Menü değişince içerik değişsin
+        self.menu_combo.currentIndexChanged.connect(self.right_stack.setCurrentIndex)
+
+        # Pixhawk parametre fonksiyonları
+        def refresh_params():
+            if self.master:
+                self.param_table.setRowCount(0)
+                params = self.master.parameters
+                for i, (key, value) in enumerate(params.items()):
+                    self.param_table.insertRow(i)
+                    self.param_table.setItem(i, 0, QTableWidgetItem(str(key)))
+                    self.param_table.setItem(i, 1, QTableWidgetItem(str(value)))
+            else:
+                self.param_table.setRowCount(0)
+        self.refresh_params_button.clicked.connect(refresh_params)
+
+        def on_param_selected(row, col):
+            name = self.param_table.item(row, 0).text()
+            value = self.param_table.item(row, 1).text()
+            self.param_name_edit.setText(name)
+            self.param_value_edit.setText(value)
+            self.set_param_button.setEnabled(True)
+        self.param_table.cellClicked.connect(on_param_selected)
+
+        def set_param():
+            name = self.param_name_edit.text().strip()
+            value = self.param_value_edit.text().strip()
+            if self.master and name and value:
+                try:
+                    self.master.parameters[name] = type(self.master.parameters[name])(float(value))
+                    self.status_label.setText(f"✅ {name} güncellendi!")
+                    refresh_params()
+                except Exception as e:
+                    self.status_label.setText(f"❌ Hata: {e}")
+        self.set_param_button.clicked.connect(set_param)
+
+        # Parametreleri dosyaya kaydet
+        def save_params():
+            if self.master:
+                params = self.master.parameters
+                options = QFileDialog.Options()
+                fileName, _ = QFileDialog.getSaveFileName(self, "Parametreleri Kaydet", "pixhawk_params.param", "Parametre Dosyası (*.param *.txt)", options=options)
+                if fileName:
+                    try:
+                        with open(fileName, 'w') as f:
+                            for key, value in params.items():
+                                f.write(f"{key}\t{value}\n")
+                        QMessageBox.information(self, "Başarılı", f"Parametreler kaydedildi: {fileName}")
+                    except Exception as e:
+                        QMessageBox.critical(self, "Hata", f"Kaydetme hatası: {e}")
+        self.save_params_button.clicked.connect(save_params)
+
+        # Parametreleri dosyadan yükle
+        def load_params():
+            if self.master:
+                options = QFileDialog.Options()
+                fileName, _ = QFileDialog.getOpenFileName(self, "Parametreleri Yükle", "", "Parametre Dosyası (*.param *.txt)", options=options)
+                if fileName:
+                    try:
+                        with open(fileName, 'r') as f:
+                            for line in f:
+                                if line.strip() and not line.startswith('#'):
+                                    parts = line.strip().split()
+                                    if len(parts) >= 2:
+                                        key, value = parts[0], parts[1]
+                                        if key in self.master.parameters:
+                                            self.master.parameters[key] = type(self.master.parameters[key])(float(value))
+                        QMessageBox.information(self, "Başarılı", f"Parametreler yüklendi: {fileName}")
+                        refresh_params()
+                    except Exception as e:
+                        QMessageBox.critical(self, "Hata", f"Yükleme hatası: {e}")
+        self.load_params_button.clicked.connect(load_params)
+
+        # Bağlantı sonrası butonları aktif et
+        old_update_status = self.update_status
+        def new_update_status(success, master):
+            old_update_status(success, master)
+            if success:
+                self.refresh_params_button.setEnabled(True)
+                self.save_params_button.setEnabled(True)
+                self.load_params_button.setEnabled(True)
+            else:
+                self.refresh_params_button.setEnabled(False)
+                self.save_params_button.setEnabled(False)
+                self.load_params_button.setEnabled(False)
+        self.update_status = new_update_status
+
+        # Sağ panel ana layout
+        right_layout = QVBoxLayout()
+        right_layout.addWidget(self.menu_combo)
+        right_layout.addLayout(self.right_stack)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(4)
 
         # Sağ paneli sabit genişlikte bir QWidget'e koy
         right_panel = QWidget()
         right_panel.setLayout(right_layout)
         right_panel.setFixedWidth(400)  # Sağ panel genişliği (isteğe göre değiştirilebilir)
 
+        # Ana layout
+        main_layout = QHBoxLayout()
+        left_layout = QVBoxLayout()
+        left_layout.addWidget(self.web_view, stretch=2)
         main_layout.addLayout(left_layout)
         main_layout.addWidget(right_panel)
         self.setLayout(main_layout)
@@ -402,7 +551,7 @@ class DroneGCS(QWidget):
             try:
                 self.master.close()
                 self.master = None
-                self.status_label.setText("🟡 Durum: Bağlı Değil")
+                self.status_label.setText("�� Durum: Bağlı Değil")
                 self.start_telemetry_button.setEnabled(False)
                 # MarqueeLabel için metin güncelleme
                 self.connect_button.full_text = "🔗 Bağlan   "

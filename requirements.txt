@@ -1,4 +1,5 @@
 PyQt5>=5.15.0
 PyQtWebEngine>=5.15.0
 dronekit>=2.9.2
-pymavlink>=2.4.16 
+pymavlink>=2.4.16
+future>=0.18.2
